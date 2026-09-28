@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNO! Multiplayer - Real-time Fun</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+
+    <!-- Header Navbar -->
+    <header>
+        <div class="logo-container">
+            <div class="logo-badge">UNO!</div>
+            <span style="font-weight: 700; font-size: 1.1rem; color: #94a3b8;">ONLINE MULTIPLAYER</span>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <button class="btn-icon" onclick="openLeaderboard()">
+                <span>🏆</span> Leaderboard
+            </button>
+            <button class="btn-icon" onclick="toggleChat()">
+                <span>💬</span> Chat
+            </button>
+        </div>
+    </header>
+
+    <!-- Floating Emoji Particle Overlay -->
+    <div id="emoji-overlay"></div>
+
+    <!-- Lobby Screen -->
+    <div id="lobby-screen">
+        <div class="glass-panel lobby-card">
+            <h1 style="font-size: 2rem; margin-bottom: 10px;">Play UNO With Friends</h1>
+            <p style="color: #94a3b8; font-size: 0.95rem;">Enter your name and pick your favorite avatar!</p>
+
+            <div class="avatar-picker">
+                <span class="avatar-option selected" onclick="selectAvatar(this, '😃')">😃</span>
+                <span class="avatar-option" onclick="selectAvatar(this, '😎')">😎</span>
+                <span class="avatar-option" onclick="selectAvatar(this, '🦊')">🦊</span>
+                <span class="avatar-option" onclick="selectAvatar(this, '👑')">👑</span>
+                <span class="avatar-option" onclick="selectAvatar(this, '🚀')">🚀</span>
+                <span class="avatar-option" onclick="selectAvatar(this, '🔥')">🔥</span>
+            </div>
+
+            <div class="form-group">
+                <label for="username-input">YOUR NAME</label>
+                <input type="text" id="username-input" class="form-input" placeholder="e.g. Mouleesh" maxlength="15">
+            </div>
+
+            <div class="form-group">
+                <label for="room-input">JOIN ROOM CODE (OPTIONAL)</label>
+                <input type="text" id="room-input" class="form-input" placeholder="e.g. X7K9P2" style="text-transform: uppercase;">
+            </div>
+
+            <button class="btn-primary" onclick="handleJoinOrCreate()">🎮 CREATE / JOIN ROOM</button>
+        </div>
+
+        <!-- Room Waiting State (Hidden initially) -->
+        <div id="room-waiting" class="glass-panel" style="display: none;">
+            <h2 style="color: #94a3b8; font-size: 1rem;">SHARE ROOM CODE WITH FRIENDS</h2>
+            <div id="display-room-code" class="room-code-badge" title="Click to copy" onclick="copyRoomCode()">------</div>
+
+            <h3 style="margin-bottom: 15px; font-size: 1.1rem;">Players in Lobby (<span id="player-count">1</span>/6)</h3>
+            <div id="players-list" class="players-grid">
+                <!-- Players dynamically populated -->
+            </div>
+
+            <div style="display: flex; gap: 15px; width: 100%;">
+                <button class="btn-secondary" onclick="addBotPlayer()">🤖 ADD BOT</button>
+                <button class="btn-primary" onclick="startGame()">🚀 START GAME</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Game Screen -->
+    <div id="game-screen">
+
+        <!-- Opponents Top Bar -->
+        <div id="opponents-bar" class="opponents-bar">
+            <!-- Opponent cards dynamically populated -->
+        </div>
+
+        <!-- Center Table -->
+        <div class="center-table">
+            <!-- Direction Indicator Ring -->
+            <div id="direction-ring" class="direction-indicator"></div>
+
+            <!-- Deck Pile -->
+            <div class="deck-pile" onclick="drawCard()" title="Click to draw card">
+                <div class="uno-card uno-card-back">
+                    <span class="uno-card-back-text">UNO</span>
+                </div>
+                <div id="deck-count-tag" style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-weight: bold; background: rgba(0,0,0,0.6); padding: 2px 10px; border-radius: 10px; font-size: 0.85rem;">Cards: 108</div>
+            </div>
+
+            <!-- Discard Pile -->
+            <div class="discard-pile" id="discard-pile-container">
+                <!-- Top discard card rendered here -->
+            </div>
+
+            <!-- Current Color Banner -->
+            <div id="current-color-banner" class="color-banner red" style="position: absolute; top: -50px;">
+                COLOR: <span id="color-name">RED</span>
+            </div>
+        </div>
+
+        <!-- Player Controls & Hand -->
+        <div class="player-area">
+            <div class="action-buttons">
+                <button class="btn-uno" onclick="callUno()">🔥 SHOUT UNO!</button>
+
+                <!-- Floating Emoji Reaction Bar -->
+                <div class="emoji-bar">
+                    <button class="emoji-btn" onclick="sendEmoji('🔥')">🔥</button>
+                    <button class="emoji-btn" onclick="sendEmoji('😂')">😂</button>
+                    <button class="emoji-btn" onclick="sendEmoji('😭')">😭</button>
+                    <button class="emoji-btn" onclick="sendEmoji('😡')">😡</button>
+                    <button class="emoji-btn" onclick="sendEmoji('👑')">👑</button>
+                    <button class="emoji-btn" onclick="sendEmoji('😱')">😱</button>
+                    <button class="emoji-btn" onclick="sendEmoji('🎉')">🎉</button>
+                </div>
+            </div>
+
+            <!-- Player Hand -->
+            <div id="player-hand" class="player-hand">
+                <!-- Cards rendered dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Chat Drawer -->
+    <div id="chat-drawer" class="chat-drawer">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+            <h3>💬 Room Chat</h3>
+            <button onclick="toggleChat()" style="background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+        <div id="chat-messages" class="chat-messages">
+            <div class="chat-bubble">
+                <div class="chat-author">System 🤖</div>
+                <div>Welcome to UNO! Have fun playing with friends.</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 15px;">
+            <input type="text" id="chat-input" class="form-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendChatMessage()">
+            <button class="btn-primary" style="width: auto; padding: 10px 16px; margin: 0;" onclick="sendChatMessage()">Send</button>
+        </div>
+    </div>
+
+    <!-- Wild Color Picker Modal -->
+    <div id="color-modal" class="modal-overlay">
+        <div class="glass-panel modal-content">
+            <h2>🎨 PICK A COLOR</h2>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;">Choose the new active color for the discard pile</p>
+
+            <div class="color-picker-grid">
+                <button class="color-choice-btn red" onclick="selectWildColor('red')">RED</button>
+                <button class="color-choice-btn blue" onclick="selectWildColor('blue')">BLUE</button>
+                <button class="color-choice-btn green" onclick="selectWildColor('green')">GREEN</button>
+                <button class="color-choice-btn yellow" onclick="selectWildColor('yellow')">YELLOW</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaderboard Modal -->
+    <div id="leaderboard-modal" class="modal-overlay">
+        <div class="glass-panel modal-content" style="max-width: 500px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>🏆 MongoDB Leaderboard</h2>
+                <button onclick="closeLeaderboard()" style="background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+            <div id="leaderboard-list" style="max-height: 350px; overflow-y: auto; text-align: left;">
+                <!-- Leaderboard items populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Victory / Game Over Modal -->
+    <div id="victory-modal" class="modal-overlay">
+        <div class="glass-panel modal-content">
+            <h1 id="winner-title" style="font-size: 2.5rem; margin-bottom: 10px;">🎉 WINNER! 🎉</h1>
+            <p id="winner-desc" style="font-size: 1.2rem; color: #60a5fa; margin-bottom: 20px;"></p>
+            <button class="btn-primary" onclick="closeVictoryModal()">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/audio.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+</body>
+</html>

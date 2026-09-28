@@ -5,6 +5,8 @@ let currentRoomCode = null;
 let mySid = null;
 let currentGameState = null;
 let pendingWildCardId = null;
+let isSoundMuted = false;
+let currentTutorialSlide = 1;
 
 socket.on('connect', () => {
     mySid = socket.id;
@@ -15,10 +17,38 @@ socket.on('error_message', (data) => {
     alert(data.message);
 });
 
+// Avatar selection
 function selectAvatar(element, avatar) {
     document.querySelectorAll('.avatar-option').forEach(el => el.classList.remove('selected'));
     element.classList.add('selected');
     currentAvatar = avatar;
+}
+
+// Menu Navigation
+function showPlayerSelectionScreen() {
+    document.getElementById('main-menu-card').style.display = 'none';
+    document.getElementById('player-count-screen').style.display = 'block';
+    document.getElementById('online-lobby-screen').style.display = 'none';
+}
+
+function showOnlineLobbyScreen() {
+    document.getElementById('main-menu-card').style.display = 'none';
+    document.getElementById('player-count-screen').style.display = 'none';
+    document.getElementById('online-lobby-screen').style.display = 'block';
+}
+
+function backToMainMenu() {
+    document.getElementById('main-menu-card').style.display = 'block';
+    document.getElementById('player-count-screen').style.display = 'none';
+    document.getElementById('online-lobby-screen').style.display = 'none';
+    document.getElementById('room-waiting').style.display = 'none';
+}
+
+// Quick Bot Match (2, 3, 4 Players - Image 2)
+function startQuickBotMatch(playerCount) {
+    unoAudio.init();
+    const username = document.getElementById('username-input').value.trim() || 'Player';
+    socket.emit('quick_bot_game', { username: username, avatar: currentAvatar, player_count: playerCount });
 }
 
 function handleJoinOrCreate() {
@@ -36,15 +66,17 @@ function handleJoinOrCreate() {
 socket.on('room_created', (data) => {
     currentRoomCode = data.room_code;
     document.getElementById('display-room-code').innerText = currentRoomCode;
-    document.getElementById('room-waiting').style.display = 'flex';
-    document.querySelector('.lobby-card').style.display = 'none';
+    document.getElementById('room-waiting').style.display = 'block';
+    document.getElementById('online-lobby-screen').style.display = 'none';
 });
 
 socket.on('room_joined', (data) => {
     currentRoomCode = data.room_code;
     document.getElementById('display-room-code').innerText = currentRoomCode;
-    document.getElementById('room-waiting').style.display = 'flex';
-    document.querySelector('.lobby-card').style.display = 'none';
+    document.getElementById('room-waiting').style.display = 'block';
+    document.getElementById('online-lobby-screen').style.display = 'none';
+    document.getElementById('player-count-screen').style.display = 'none';
+    document.getElementById('main-menu-card').style.display = 'none';
 });
 
 function addBotPlayer() {
@@ -60,7 +92,62 @@ function copyRoomCode() {
     alert("Room Code copied to clipboard: " + currentRoomCode);
 }
 
-// Render game state from server
+// Sound & Fullscreen Toggles
+function toggleSound() {
+    isSoundMuted = !isSoundMuted;
+    const btn = document.getElementById('sound-btn');
+    if (isSoundMuted) {
+        btn.innerText = '🔇';
+        unoAudio.soundEnabled = false;
+    } else {
+        btn.innerText = '🔊';
+        unoAudio.soundEnabled = true;
+    }
+}
+
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.log(err));
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+}
+
+// Tutorial Modal (Images 3, 4, 5)
+function openTutorial() {
+    currentTutorialSlide = 1;
+    updateTutorialSlideDisplay();
+    document.getElementById('tutorial-modal').style.display = 'flex';
+}
+
+function closeTutorial() {
+    document.getElementById('tutorial-modal').style.display = 'none';
+}
+
+function nextTutorialSlide() {
+    if (currentTutorialSlide < 3) {
+        currentTutorialSlide++;
+        updateTutorialSlideDisplay();
+    }
+}
+
+function prevTutorialSlide() {
+    if (currentTutorialSlide > 1) {
+        currentTutorialSlide--;
+        updateTutorialSlideDisplay();
+    }
+}
+
+function updateTutorialSlideDisplay() {
+    for (let i = 1; i <= 3; i++) {
+        document.getElementById(`t-slide-${i}`).style.display = (i === currentTutorialSlide) ? 'flex' : 'none';
+    }
+    document.getElementById('slide-indicator').innerText = `${currentTutorialSlide} / 3`;
+}
+
+// Render game state
 socket.on('game_state', (state) => {
     currentGameState = state;
 
@@ -68,16 +155,15 @@ socket.on('game_state', (state) => {
         document.getElementById('lobby-screen').style.display = 'flex';
         document.getElementById('game-screen').style.display = 'none';
 
-        // Update waiting players list
         const playersList = document.getElementById('players-list');
         playersList.innerHTML = '';
         document.getElementById('player-count').innerText = state.players.length;
 
         state.players.forEach(p => {
             const slot = document.createElement('div');
-            slot.className = 'player-slot active';
+            slot.style.cssText = 'background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; padding: 15px; text-align: center;';
             slot.innerHTML = `
-                <div class="player-avatar">${p.avatar}</div>
+                <div style="font-size: 2.2rem; margin-bottom: 5px;">${p.avatar}</div>
                 <div style="font-weight: bold; font-size: 0.9rem;">${p.name}</div>
             `;
             playersList.appendChild(slot);
@@ -90,13 +176,12 @@ socket.on('game_state', (state) => {
         renderGameTable(state);
 
         if (state.status === 'finished' && state.winner) {
-            showVictoryModal(state.winner);
+            showVictoryModal(state.winner, state.last_round_points);
         }
     }
 });
 
 function renderGameTable(state) {
-    // Render opponents
     const opponentsBar = document.getElementById('opponents-bar');
     opponentsBar.innerHTML = '';
 
@@ -107,13 +192,15 @@ function renderGameTable(state) {
             const card = document.createElement('div');
             card.className = `opponent-card ${p.is_current ? 'turn-active' : ''}`;
             card.innerHTML = `
-                <span style="font-size: 1.5rem;">${p.avatar}</span>
+                <span style="font-size: 1.6rem;">${p.avatar}</span>
                 <div>
                     <div style="font-weight: bold; font-size: 0.85rem;">${p.name} ${p.called_uno ? '🔥 UNO!' : ''}</div>
-                    <span class="hand-badge">🃏 ${p.hand_count}</span>
+                    <div style="display: flex; gap: 6px; margin-top: 2px;">
+                        <span class="hand-badge">🃏 ${p.hand_count}</span>
+                        <span class="score-badge">🏆 ${p.score} PTS</span>
+                    </div>
                 </div>
             `;
-            // Click opponent to catch UNO failure if they have 1 card
             if (p.hand_count === 1 && !p.called_uno) {
                 card.style.cursor = 'pointer';
                 card.title = 'Click to catch UNO failure!';
@@ -123,7 +210,6 @@ function renderGameTable(state) {
         }
     });
 
-    // Render Direction Ring
     const ring = document.getElementById('direction-ring');
     if (state.direction === -1) {
         ring.classList.add('counter-clockwise');
@@ -131,19 +217,16 @@ function renderGameTable(state) {
         ring.classList.remove('counter-clockwise');
     }
 
-    // Render Color Banner
     const colorBanner = document.getElementById('current-color-banner');
     colorBanner.className = `color-banner ${state.current_color || 'red'}`;
     document.getElementById('color-name').innerText = (state.current_color || 'RED').toUpperCase();
 
-    // Render Discard Pile Top Card
     const discardContainer = document.getElementById('discard-pile-container');
     discardContainer.innerHTML = '';
     if (state.top_discard) {
         discardContainer.appendChild(createCardElement(state.top_discard, false));
     }
 
-    // Render Player Hand
     const handContainer = document.getElementById('player-hand');
     handContainer.innerHTML = '';
 
@@ -158,6 +241,7 @@ function renderGameTable(state) {
     document.getElementById('deck-count-tag').innerText = `Cards: ${state.deck_count}`;
 }
 
+// Create Arcade Styled Cards (Images 1, 3, 4, 5)
 function createCardElement(card, isInteractive) {
     const cardEl = document.createElement('div');
     cardEl.className = `uno-card ${card.color}`;
@@ -170,9 +254,11 @@ function createCardElement(card, isInteractive) {
     else if (card.value === 'wild_draw4') valDisplay = '+4';
 
     cardEl.innerHTML = `
-        <div class="uno-card-oval">
-            <span class="uno-card-value">${valDisplay}</span>
+        <div class="card-corner top-left">${valDisplay}</div>
+        <div class="card-diamond-badge">
+            <span class="card-diamond-inner">${valDisplay}</span>
         </div>
+        <div class="card-corner bottom-right">${valDisplay}</div>
     `;
 
     return cardEl;
@@ -189,7 +275,7 @@ function onCardClicked(card) {
         document.getElementById('color-modal').style.display = 'flex';
     } else {
         socket.emit('play_card', { card_id: card.id });
-        unoAudio.playCardSound();
+        if (!isSoundMuted) unoAudio.playCardSound();
     }
 }
 
@@ -197,7 +283,7 @@ function selectWildColor(color) {
     document.getElementById('color-modal').style.display = 'none';
     if (pendingWildCardId) {
         socket.emit('play_card', { card_id: pendingWildCardId, chosen_color: color });
-        unoAudio.playCardSound();
+        if (!isSoundMuted) unoAudio.playCardSound();
         pendingWildCardId = null;
     }
 }
@@ -208,15 +294,14 @@ function drawCard() {
         return;
     }
     socket.emit('draw_card', {});
-    unoAudio.playDrawSound();
+    if (!isSoundMuted) unoAudio.playDrawSound();
 }
 
 function callUno() {
     socket.emit('call_uno', {});
-    unoAudio.playUnoShoutSound();
+    if (!isSoundMuted) unoAudio.playUnoShoutSound();
 }
 
-// Floating Emoji Reaction System
 function sendEmoji(emojiChar) {
     socket.emit('send_emoji', { emoji: emojiChar });
 }
@@ -242,7 +327,6 @@ function spawnFloatingEmoji(emojiChar, senderName) {
     }, 2500);
 }
 
-// Live Chat Drawer & Messages
 function toggleChat() {
     const drawer = document.getElementById('chat-drawer');
     drawer.classList.toggle('open');
@@ -271,7 +355,7 @@ socket.on('new_chat', (data) => {
 
 socket.on('uno_shout', (data) => {
     spawnFloatingEmoji('🔥 UNO!', data.player_name);
-    unoAudio.playUnoShoutSound();
+    if (!isSoundMuted) unoAudio.playUnoShoutSound();
 });
 
 // Leaderboard Modal
@@ -303,9 +387,10 @@ function closeLeaderboard() {
     document.getElementById('leaderboard-modal').style.display = 'none';
 }
 
-function showVictoryModal(winner) {
-    unoAudio.playVictorySound();
-    document.getElementById('winner-desc').innerText = `${winner.avatar} ${winner.name} won the match!`;
+function showVictoryModal(winner, pointsWon) {
+    if (!isSoundMuted) unoAudio.playVictorySound();
+    document.getElementById('winner-desc').innerText = `${winner.avatar} ${winner.name} won the round!`;
+    document.getElementById('winner-score-info').innerText = `+${pointsWon} PTS Earned! Total: ${winner.score} / 250 PTS`;
     document.getElementById('victory-modal').style.display = 'flex';
 }
 

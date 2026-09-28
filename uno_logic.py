@@ -30,10 +30,23 @@ def generate_deck():
     random.shuffle(deck)
     return deck
 
+def calculate_card_points(card):
+    val = card['value']
+    if val in ['wild', 'wild_draw4']:
+        return 50
+    elif val in ['skip', 'reverse', 'draw2']:
+        return 20
+    elif val.isdigit():
+        return int(val)
+    return 0
+
+def calculate_hand_points(hand):
+    return sum(calculate_card_points(c) for c in hand)
+
 class UnoGame:
-    def __init__(self, room_code):
+    def __init__(self, room_code, target_score=250):
         self.room_code = room_code
-        self.players = [] # [{sid, name, avatar, hand, is_bot, cards_played_count, called_uno}]
+        self.players = [] # [{sid, name, avatar, hand, is_bot, cards_played_count, called_uno, score}]
         self.deck = []
         self.discard_pile = []
         self.current_player_idx = 0
@@ -42,10 +55,12 @@ class UnoGame:
         self.status = 'lobby' # 'lobby', 'playing', 'finished'
         self.winner = None
         self.turn_count = 0
+        self.target_score = target_score
         self.log_messages = []
+        self.round_winner = None
+        self.last_round_points = 0
         
     def add_player(self, sid, name, avatar="😃", is_bot=False):
-        # Check if already in room
         for p in self.players:
             if p['sid'] == sid:
                 p['name'] = name
@@ -58,7 +73,8 @@ class UnoGame:
             'hand': [],
             'is_bot': is_bot,
             'cards_played_count': 0,
-            'called_uno': False
+            'called_uno': False,
+            'score': 0
         }
         self.players.append(player)
         self.add_log(f"{name} joined the room.")
@@ -88,6 +104,11 @@ class UnoGame:
         avatar = bot_avatars[idx % len(bot_avatars)]
         return self.add_player(bot_id, name, avatar, is_bot=True)
 
+    def setup_quick_bot_game(self, total_players=4):
+        # Fill remaining slots with bots up to total_players
+        while len(self.players) < total_players:
+            self.add_bot()
+
     def start_game(self):
         if len(self.players) < 2:
             return False, "At least 2 players are needed to start the game."
@@ -98,6 +119,7 @@ class UnoGame:
         self.current_player_idx = random.randint(0, len(self.players) - 1)
         self.direction = 1
         self.winner = None
+        self.round_winner = None
         self.turn_count = 1
         self.log_messages = []
         
@@ -150,13 +172,10 @@ class UnoGame:
 
     def is_valid_play(self, card):
         top_card = self.discard_pile[-1]
-        # Wild cards can always be played
         if card['color'] == 'wild' or card['type'] in ['wild', 'wild_draw4']:
             return True
-        # Match color
         if card['color'] == self.current_color:
             return True
-        # Match value
         if card['value'] == top_card['value']:
             return True
         return False
@@ -169,7 +188,6 @@ class UnoGame:
         if not curr_p or curr_p['sid'] != player_sid:
             return False, "It's not your turn!"
             
-        # Find card in player's hand
         card_idx = None
         for i, c in enumerate(curr_p['hand']):
             if c['id'] == card_id:
@@ -184,16 +202,13 @@ class UnoGame:
         if not self.is_valid_play(card):
             return False, f"Invalid card play! Card must match color {self.current_color.upper()} or symbol {self.discard_pile[-1]['value'].upper()}."
             
-        # Remove card from hand and put in discard pile
         curr_p['hand'].pop(card_idx)
         curr_p['cards_played_count'] += 1
         self.discard_pile.append(card)
         
-        # Reset UNO call status if player hand size > 1
         if len(curr_p['hand']) > 1:
             curr_p['called_uno'] = False
 
-        # Set current color
         if card['color'] == 'wild' or card['type'] in ['wild', 'wild_draw4']:
             if not chosen_color or chosen_color not in COLORS:
                 chosen_color = random.choice(COLORS)
@@ -203,14 +218,23 @@ class UnoGame:
             self.current_color = card['color']
             self.add_log(f"{curr_p['name']} played {card['color'].upper()} {card['value'].upper()}.")
 
-        # Check win condition
+        # Check win condition for round
         if len(curr_p['hand']) == 0:
-            self.status = 'finished'
-            self.winner = curr_p
-            self.add_log(f"🎉 {curr_p['name']} won the game! 🎉")
+            round_pts = sum(calculate_hand_points(p['hand']) for p in self.players if p['sid'] != curr_p['sid'])
+            curr_p['score'] += round_pts
+            self.last_round_points = round_pts
+            self.round_winner = curr_p
+            
+            if curr_p['score'] >= self.target_score or len([p for p in self.players if not p['is_bot']]) <= 1:
+                self.status = 'finished'
+                self.winner = curr_p
+                self.add_log(f"🏆 {curr_p['name']} WON THE CHAMPIONSHIP WITH {curr_p['score']} PTS! 🏆")
+            else:
+                self.status = 'finished'
+                self.winner = curr_p
+                self.add_log(f"🎉 {curr_p['name']} won the round (+{round_pts} PTS)! Total: {curr_p['score']} PTS.")
             return True, "Win"
 
-        # Apply Special Card Effects
         next_turn_advance = 1
         if card['value'] == 'skip':
             next_turn_advance = 2
@@ -251,13 +275,11 @@ class UnoGame:
         drawn_card = drawn_cards[0]
         self.add_log(f"{curr_p['name']} drew a card.")
         
-        # Check if drawn card can be automatically played or if turn passes
         can_play = self.is_valid_play(drawn_card)
         if not can_play:
             self._advance_turn()
             return True, "Drawn card could not be played. Turn passed.", drawn_card
         else:
-            # Player can choose to play it or keep it
             return True, "Drawn card can be played!", drawn_card
 
     def call_uno(self, player_sid):
@@ -326,19 +348,15 @@ class UnoGame:
         if not curr_p or not curr_p['is_bot'] or self.status != 'playing':
             return False
             
-        # Check if bot has 2 cards and will be down to 1 card, call UNO
         if len(curr_p['hand']) == 2:
             curr_p['called_uno'] = True
             self.add_log(f"🔥 {curr_p['name']} (Bot) called UNO! 🔥")
             
-        # Find playable card
         playable = [c for c in curr_p['hand'] if self.is_valid_play(c)]
         if playable:
-            # Prefer matching color, then action cards, then wild
             card_to_play = playable[0]
             chosen_color = None
             if card_to_play['color'] == 'wild' or card_to_play['type'] in ['wild', 'wild_draw4']:
-                # Count colors in bot's hand to pick smartest color
                 color_counts = {c: 0 for c in COLORS}
                 for c in curr_p['hand']:
                     if c['color'] in color_counts:
@@ -348,7 +366,6 @@ class UnoGame:
             self.play_card(curr_p['sid'], card_to_play['id'], chosen_color)
             return True
         else:
-            # Draw card
             success, msg, drawn_card = self.player_draw_card(curr_p['sid'])
             if drawn_card and self.is_valid_play(drawn_card):
                 chosen_color = None
@@ -367,9 +384,9 @@ class UnoGame:
                 'is_bot': p['is_bot'],
                 'hand_count': len(p['hand']),
                 'called_uno': p['called_uno'],
+                'score': p['score'],
                 'is_current': (self.get_current_player() and self.get_current_player()['sid'] == p['sid'])
             }
-            # Only send exact hand cards to the owner player!
             if for_sid and p['sid'] == for_sid:
                 p_info['hand'] = p['hand']
             players_data.append(p_info)
@@ -384,7 +401,9 @@ class UnoGame:
             'current_color': self.current_color,
             'top_discard': top_discard,
             'deck_count': len(self.deck),
+            'target_score': self.target_score,
             'players': players_data,
-            'winner': {'name': self.winner['name'], 'avatar': self.winner['avatar']} if self.winner else None,
+            'winner': {'name': self.winner['name'], 'avatar': self.winner['avatar'], 'score': self.winner['score']} if self.winner else None,
+            'last_round_points': self.last_round_points,
             'log_messages': self.log_messages[-10:]
         }

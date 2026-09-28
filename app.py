@@ -41,7 +41,7 @@ def trigger_bot_turns_if_needed(room_code):
 
     curr_p = game.get_current_player()
     if curr_p and curr_p['is_bot']:
-        socketio.sleep(1.2) # Natural delay for bot turn
+        socketio.sleep(1.0)
         if room_code in games and game.status == 'playing':
             game.bot_take_turn()
             broadcast_game_state(room_code)
@@ -86,7 +86,6 @@ def handle_disconnect():
             game.remove_player(sid)
             leave_room(room_code)
             if len([p for p in game.players if not p['is_bot']]) == 0:
-                # Cleanup empty rooms after disconnects
                 del games[room_code]
             else:
                 broadcast_game_state(room_code)
@@ -108,6 +107,28 @@ def handle_create_room(data):
     
     emit('room_created', {'room_code': room_code, 'player': player})
     broadcast_game_state(room_code)
+
+@socketio.on('quick_bot_game')
+def handle_quick_bot_game(data):
+    username = data.get('username', 'Player').strip()
+    avatar = data.get('avatar', '😃')
+    player_count = int(data.get('player_count', 4))
+    
+    get_or_create_user(username, avatar)
+    room_code = generate_room_code()
+    game = UnoGame(room_code)
+    games[room_code] = game
+    
+    player = game.add_player(request.sid, username, avatar)
+    user_sessions[request.sid] = {'username': username, 'avatar': avatar, 'room_code': room_code}
+    join_room(room_code)
+    
+    game.setup_quick_bot_game(total_players=player_count)
+    game.start_game()
+    
+    emit('room_joined', {'room_code': room_code, 'player': player})
+    broadcast_game_state(room_code)
+    socketio.start_background_task(trigger_bot_turns_if_needed, room_code)
 
 @socketio.on('join_room')
 def handle_join_room(data):

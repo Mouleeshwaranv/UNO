@@ -3,36 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UNO! Multiplayer - Real-time Fun</title>
+    <title>UNO! 4 Colors Arcade Multiplayer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
 
-    <!-- Header Navbar -->
+    <!-- Header Control Bar -->
     <header>
-        <div class="logo-container">
-            <div class="logo-badge">UNO!</div>
-            <span style="font-weight: 700; font-size: 1.1rem; color: #94a3b8;">ONLINE MULTIPLAYER</span>
+        <div class="icon-btn-bar">
+            <button class="top-control-btn" onclick="openTutorial()" title="How to Play / Rules">i</button>
+            <button class="top-control-btn" onclick="toggleFullscreen()" title="Toggle Fullscreen">⛶</button>
         </div>
-        <div style="display: flex; gap: 12px; align-items: center;">
-            <button class="btn-icon" onclick="openLeaderboard()">
-                <span>🏆</span> Leaderboard
-            </button>
-            <button class="btn-icon" onclick="toggleChat()">
-                <span>💬</span> Chat
-            </button>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="font-weight: 900; font-size: 1.4rem; color: #fbc02d; letter-spacing: 1px;">4 COLORS</div>
+            <span style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 6px;">UNO</span>
+        </div>
+
+        <div class="icon-btn-bar">
+            <button id="sound-btn" class="top-control-btn" onclick="toggleSound()" title="Toggle Sound">🔊</button>
+            <button class="top-control-btn" onclick="toggleChat()" title="Room Chat">💬</button>
         </div>
     </header>
 
     <!-- Floating Emoji Particle Overlay -->
     <div id="emoji-overlay"></div>
 
-    <!-- Lobby Screen -->
+    <!-- Main Landing Screen (Image 1 Style) -->
     <div id="lobby-screen">
-        <div class="glass-panel lobby-card">
-            <h1 style="font-size: 2rem; margin-bottom: 10px;">Play UNO With Friends</h1>
-            <p style="color: #94a3b8; font-size: 0.95rem;">Enter your name and pick your favorite avatar!</p>
+        <div id="main-menu-card" class="glass-panel menu-card">
+            
+            <!-- Central "4 Colors" Fan Logo -->
+            <div class="menu-fan-logo">
+                <div class="fan-card c1">3</div>
+                <div class="fan-card c2">5</div>
+                <div class="fan-card c3">1</div>
+                <div class="fan-card c4">8</div>
+                <div class="center-diamond-logo">
+                    <div class="center-diamond-inner">
+                        <div class="logo-main-num">4</div>
+                        <div class="logo-main-text">COLORS</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group" style="max-width: 320px; margin: 0 auto 15px auto;">
+                <label for="username-input">YOUR NAME</label>
+                <input type="text" id="username-input" class="form-input" placeholder="Player" value="Player" maxlength="15">
+            </div>
 
             <div class="avatar-picker">
                 <span class="avatar-option selected" onclick="selectAvatar(this, '😃')">😃</span>
@@ -43,27 +62,64 @@
                 <span class="avatar-option" onclick="selectAvatar(this, '🔥')">🔥</span>
             </div>
 
-            <div class="form-group">
-                <label for="username-input">YOUR NAME</label>
-                <input type="text" id="username-input" class="form-input" placeholder="e.g. Mouleesh" maxlength="15">
+            <!-- Mode Selection Buttons (TV vs Globe - Image 1) -->
+            <div class="mode-select-grid">
+                <div class="mode-square-btn" onclick="showPlayerSelectionScreen()" title="Play VS AI Bots">
+                    <span class="icon">📺</span>
+                    <span class="label">VS BOTS</span>
+                </div>
+                <div class="mode-square-btn" onclick="showOnlineLobbyScreen()" title="Play Online with Friends">
+                    <span class="icon">🌐</span>
+                    <span class="label">ONLINE</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Player Count Selection Screen (Image 2 Style) -->
+        <div id="player-count-screen" class="glass-panel menu-card" style="display: none;">
+            <h2 style="font-size: 1.4rem; letter-spacing: 1px; margin-bottom: 25px;">SELECT THE NUMBER OF PLAYERS!</h2>
+
+            <div class="player-count-grid">
+                <!-- 2 Players Green Diamond -->
+                <div class="diamond-count-btn p2" onclick="startQuickBotMatch(2)" title="2 Players Match">
+                    <div class="diamond-count-inner">👤👤</div>
+                </div>
+
+                <!-- 3 Players Yellow Diamond -->
+                <div class="diamond-count-btn p3" onclick="startQuickBotMatch(3)" title="3 Players Match">
+                    <div class="diamond-count-inner">👤👤👤</div>
+                </div>
+
+                <!-- 4 Players Red Diamond -->
+                <div class="diamond-count-btn p4" onclick="startQuickBotMatch(4)" title="4 Players Match">
+                    <div class="diamond-count-inner">👤👤👤👤</div>
+                </div>
             </div>
 
+            <button class="btn-secondary" onclick="backToMainMenu()" style="margin-top: 20px; max-width: 200px;">BACK TO MENU</button>
+        </div>
+
+        <!-- Online Room Setup Screen -->
+        <div id="online-lobby-screen" class="glass-panel menu-card" style="display: none;">
+            <h2 style="font-size: 1.4rem; margin-bottom: 15px;">PLAY WITH FRIENDS</h2>
+            
             <div class="form-group">
-                <label for="room-input">JOIN ROOM CODE (OPTIONAL)</label>
+                <label for="room-input">ROOM CODE (LEAVE BLANK TO CREATE NEW)</label>
                 <input type="text" id="room-input" class="form-input" placeholder="e.g. X7K9P2" style="text-transform: uppercase;">
             </div>
 
             <button class="btn-primary" onclick="handleJoinOrCreate()">🎮 CREATE / JOIN ROOM</button>
+            <button class="btn-secondary" onclick="backToMainMenu()" style="margin-top: 10px;">BACK TO MENU</button>
         </div>
 
-        <!-- Room Waiting State (Hidden initially) -->
-        <div id="room-waiting" class="glass-panel" style="display: none;">
-            <h2 style="color: #94a3b8; font-size: 1rem;">SHARE ROOM CODE WITH FRIENDS</h2>
-            <div id="display-room-code" class="room-code-badge" title="Click to copy" onclick="copyRoomCode()">------</div>
+        <!-- Room Waiting State -->
+        <div id="room-waiting" class="glass-panel" style="display: none; max-width: 600px; width: 100%; padding: 30px;">
+            <h2 style="color: #94a3b8; font-size: 1rem; text-align: center;">SHARE ROOM CODE WITH FRIENDS</h2>
+            <div id="display-room-code" style="background: rgba(59, 130, 246, 0.2); border: 2px dashed #3b82f6; color: #60a5fa; font-size: 2.2rem; font-weight: 900; padding: 12px 30px; border-radius: 16px; letter-spacing: 4px; margin: 15px auto 25px auto; cursor: pointer; text-align: center;" title="Click to copy" onclick="copyRoomCode()">------</div>
 
-            <h3 style="margin-bottom: 15px; font-size: 1.1rem;">Players in Lobby (<span id="player-count">1</span>/6)</h3>
-            <div id="players-list" class="players-grid">
-                <!-- Players dynamically populated -->
+            <h3 style="margin-bottom: 15px; font-size: 1.1rem; text-align: center;">Players in Lobby (<span id="player-count">1</span>/6)</h3>
+            <div id="players-list" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                <!-- Players populated dynamically -->
             </div>
 
             <div style="display: flex; gap: 15px; width: 100%;">
@@ -76,27 +132,28 @@
     <!-- Main Game Screen -->
     <div id="game-screen">
 
-        <!-- Opponents Top Bar -->
+        <!-- Opponents Bar -->
         <div id="opponents-bar" class="opponents-bar">
             <!-- Opponent cards dynamically populated -->
         </div>
 
         <!-- Center Table -->
         <div class="center-table">
-            <!-- Direction Indicator Ring -->
             <div id="direction-ring" class="direction-indicator"></div>
 
             <!-- Deck Pile -->
             <div class="deck-pile" onclick="drawCard()" title="Click to draw card">
                 <div class="uno-card uno-card-back">
-                    <span class="uno-card-back-text">UNO</span>
+                    <div class="uno-card-back-diamond">
+                        <span class="uno-card-back-text">UNO</span>
+                    </div>
                 </div>
-                <div id="deck-count-tag" style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-weight: bold; background: rgba(0,0,0,0.6); padding: 2px 10px; border-radius: 10px; font-size: 0.85rem;">Cards: 108</div>
+                <div id="deck-count-tag" style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-weight: bold; background: rgba(0,0,0,0.7); padding: 2px 10px; border-radius: 10px; font-size: 0.85rem;">Cards: 108</div>
             </div>
 
             <!-- Discard Pile -->
             <div class="discard-pile" id="discard-pile-container">
-                <!-- Top discard card rendered here -->
+                <!-- Top card rendered here -->
             </div>
 
             <!-- Current Color Banner -->
@@ -105,7 +162,7 @@
             </div>
         </div>
 
-        <!-- Player Controls & Hand -->
+        <!-- Player Area & Hand -->
         <div class="player-area">
             <div class="action-buttons">
                 <button class="btn-uno" onclick="callUno()">🔥 SHOUT UNO!</button>
@@ -138,7 +195,7 @@
         <div id="chat-messages" class="chat-messages">
             <div class="chat-bubble">
                 <div class="chat-author">System 🤖</div>
-                <div>Welcome to UNO! Have fun playing with friends.</div>
+                <div>Welcome to UNO 4 Colors Arcade!</div>
             </div>
         </div>
         <div style="display: flex; gap: 8px; margin-top: 15px;">
@@ -162,11 +219,82 @@
         </div>
     </div>
 
+    <!-- Interactive Tutorial Modal (Images 3, 4, 5 Style) -->
+    <div id="tutorial-modal" class="modal-overlay">
+        <div class="glass-panel modal-content" style="max-width: 520px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="font-size: 1.3rem;">WELCOME TO FOUR COLORS!</h2>
+                <button onclick="closeTutorial()" style="background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+
+            <!-- Slide 1 (Matching Rules - Images 3, 4, 5) -->
+            <div id="t-slide-1" class="tutorial-slide-card">
+                <div class="uno-card blue" style="transform: none; cursor: default;">
+                    <div class="card-corner top-left">5</div>
+                    <div class="card-diamond-badge">
+                        <span class="card-diamond-inner">5</span>
+                    </div>
+                    <div class="card-corner bottom-right">5</div>
+                </div>
+                <div>
+                    <div style="font-weight: 800; margin-bottom: 8px; font-size: 0.95rem;">MATCH CARDS BY COLOR OR NUMBER!</div>
+                    <div style="font-size: 0.85rem; color: #94a3b8; line-height: 1.4;">
+                        Be the first player to get rid of all your cards!<br><br>
+                        <strong>Scoring:</strong> The winner earns the value of opponents' remaining cards. First to reach <strong>250 PTS</strong> wins the championship!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 2 (Action Cards) -->
+            <div id="t-slide-2" class="tutorial-slide-card" style="display: none;">
+                <div class="uno-card red" style="transform: none; cursor: default;">
+                    <div class="card-corner top-left">🚫</div>
+                    <div class="card-diamond-badge">
+                        <span class="card-diamond-inner">🚫</span>
+                    </div>
+                    <div class="card-corner bottom-right">🚫</div>
+                </div>
+                <div>
+                    <div style="font-weight: 800; margin-bottom: 8px; font-size: 0.95rem;">ACTION CARDS (20 PTS)</div>
+                    <div style="font-size: 0.85rem; color: #94a3b8; line-height: 1.4;">
+                        <strong>Skip (🚫):</strong> Skips the next player's turn.<br>
+                        <strong>Reverse (🔄):</strong> Flips turn direction.<br>
+                        <strong>Draw 2 (+2):</strong> Next player draws 2 cards & skips turn!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 3 (Wild Cards) -->
+            <div id="t-slide-3" class="tutorial-slide-card" style="display: none;">
+                <div class="uno-card wild" style="transform: none; cursor: default;">
+                    <div class="card-corner top-left">+4</div>
+                    <div class="card-diamond-badge">
+                        <span class="card-diamond-inner">+4</span>
+                    </div>
+                    <div class="card-corner bottom-right">+4</div>
+                </div>
+                <div>
+                    <div style="font-weight: 800; margin-bottom: 8px; font-size: 0.95rem;">WILD CARDS (50 PTS)</div>
+                    <div style="font-size: 0.85rem; color: #94a3b8; line-height: 1.4;">
+                        <strong>Wild (🎨):</strong> Choose any color to play.<br>
+                        <strong>Wild Draw 4 (+4):</strong> Choose color, and next player draws 4 cards & skips turn!
+                    </div>
+                </div>
+            </div>
+
+            <div class="tutorial-nav-bar">
+                <button class="nav-arrow-btn" onclick="prevTutorialSlide()">◄ PREV</button>
+                <span id="slide-indicator" style="font-weight: bold; color: #60a5fa;">1 / 3</span>
+                <button class="nav-arrow-btn" onclick="nextTutorialSlide()">NEXT ►</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Leaderboard Modal -->
     <div id="leaderboard-modal" class="modal-overlay">
         <div class="glass-panel modal-content" style="max-width: 500px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2>🏆 MongoDB Leaderboard</h2>
+                <h2>🏆 Leaderboard</h2>
                 <button onclick="closeLeaderboard()" style="background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer;">✕</button>
             </div>
             <div id="leaderboard-list" style="max-height: 350px; overflow-y: auto; text-align: left;">
@@ -178,8 +306,9 @@
     <!-- Victory / Game Over Modal -->
     <div id="victory-modal" class="modal-overlay">
         <div class="glass-panel modal-content">
-            <h1 id="winner-title" style="font-size: 2.5rem; margin-bottom: 10px;">🎉 WINNER! 🎉</h1>
-            <p id="winner-desc" style="font-size: 1.2rem; color: #60a5fa; margin-bottom: 20px;"></p>
+            <h1 id="winner-title" style="font-size: 2.3rem; margin-bottom: 10px;">🎉 WINNER! 🎉</h1>
+            <p id="winner-desc" style="font-size: 1.2rem; color: #60a5fa; margin-bottom: 15px;"></p>
+            <div id="winner-score-info" style="font-size: 1.1rem; font-weight: bold; background: rgba(59,130,246,0.2); padding: 10px; border-radius: 12px; margin-bottom: 20px;"></div>
             <button class="btn-primary" onclick="closeVictoryModal()">PLAY AGAIN</button>
         </div>
     </div>

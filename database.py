@@ -17,9 +17,9 @@ try:
     client.admin.command('ping')
     db = client['uno_game']
     is_connected = True
-    print("Successfully connected to MongoDB Atlas!")
-except Exception as e:
-    print(f"MongoDB connection warning: {e}. Operating in memory mode for stats.")
+    print("Connected to MongoDB Atlas!")
+except Exception:
+    print("[INFO] Database mode: In-Memory Stats Active (Connect MongoDB Atlas string in .env anytime)")
     is_connected = False
 
 # Memory storage fallback

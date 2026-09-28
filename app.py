@@ -13,7 +13,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "uno-secret-key-2026")
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 games = {} # room_code -> UnoGame
 user_sessions = {} # sid -> {username, avatar, room_code}
@@ -259,5 +259,5 @@ def handle_send_emoji(data):
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
-    print(f"🚀 UNO Game Server starting on http://localhost:{port}")
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+    print(f"UNO Game Server starting on http://localhost:{port}")
+    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
